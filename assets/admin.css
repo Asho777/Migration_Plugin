@@ -1,0 +1,104 @@
+.wsm-container {
+    max-width: 1200px;
+    margin: 20px 0;
+}
+
+.wsm-card {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+.wsm-card h2 {
+    margin-top: 0;
+    color: #23282d;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.wsm-backup-options {
+    margin: 20px 0;
+}
+
+.wsm-backup-options label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: 500;
+}
+
+.wsm-backup-options input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+.wsm-progress {
+    margin-top: 20px;
+    padding: 20px;
+    background: #f9f9f9;
+    border-radius: 4px;
+}
+
+.wsm-progress-bar {
+    width: 100%;
+    height: 20px;
+    background: #e0e0e0;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+.wsm-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #0073aa, #005a87);
+    width: 0%;
+    transition: width 0.3s ease;
+    border-radius: 10px;
+}
+
+.wsm-progress-text {
+    text-align: center;
+    font-weight: 500;
+    color: #555;
+}
+
+.button-large {
+    padding: 8px 20px !important;
+    font-size: 14px !important;
+    height: auto !important;
+}
+
+.wp-list-table th,
+.wp-list-table td {
+    padding: 12px;
+}
+
+.wsm-card ol {
+    padding-left: 20px;
+}
+
+.wsm-card ol li {
+    margin-bottom: 8px;
+    line-height: 1.5;
+}
+
+.wsm-status-success {
+    color: #46b450;
+    font-weight: 600;
+}
+
+.wsm-status-error {
+    color: #dc3232;
+    font-weight: 600;
+}
+
+@media (max-width: 768px) {
+    .wsm-container {
+        margin: 10px 0;
+    }
+    
+    .wsm-card {
+        padding: 15px;
+    }
+}
