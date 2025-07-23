@@ -1,0 +1,12 @@
+{
+  "name": "wp-migration-plugin",
+  "version": "1.0.0",
+  "description": "Professional WordPress Migration Plugin",
+  "scripts": {
+    "build": "node build.js",
+    "zip": "node zip.js"
+  },
+  "devDependencies": {
+    "archiver": "^6.0.1"
+  }
+}
