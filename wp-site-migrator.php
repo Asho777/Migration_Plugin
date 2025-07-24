@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: WP Site Migrator Pro
- * Plugin URI: https://example.com/wp-site-migrator
+ * Plugin URI: https://yourcompany.com/wp-site-migrator
  * Description: Professional WordPress site migration and cloning plugin. Complete website backup, migration, and restoration solution.
  * Version: 1.0.0
  * Author: Your Company
- * Author URI: https://example.com
+ * Author URI: https://yourcompany.com
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: wp-site-migrator
@@ -22,29 +22,20 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WSM_PLUGIN_URL', plugin_dir_url(__FILE__));
-define('WSM_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('WSM_VERSION', '1.0.0');
-define('WSM_PLUGIN_FILE', __FILE__);
+define('WSM_PLUGIN_DIR', plugin_dir_path(__FILE__));
+define('WSM_PLUGIN_URL', plugin_dir_url(__FILE__));
+define('WSM_BACKUP_DIR', WP_CONTENT_DIR . '/wsm-backups/');
+define('WSM_BACKUP_URL', WP_CONTENT_URL . '/wsm-backups/');
 
-// Main plugin class
-class WPSiteMigrator {
+class WP_Site_Migrator {
     
-    private static $instance = null;
-    
-    public static function get_instance() {
-        if (null === self::$instance) {
-            self::$instance = new self();
-        }
-        return self::$instance;
-    }
-    
-    private function __construct() {
+    public function __construct() {
         add_action('init', array($this, 'init'));
         add_action('admin_menu', array($this, 'add_admin_menu'));
-        add_action('wp_ajax_wsm_start_backup', array($this, 'start_backup'));
-        add_action('wp_ajax_wsm_download_backup', array($this, 'download_backup'));
-        add_action('admin_enqueue_scripts', array($this, 'enqueue_scripts'));
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
+        add_action('wp_ajax_wsm_start_backup', array($this, 'ajax_start_backup'));
+        add_action('wp_ajax_wsm_delete_backup', array($this, 'ajax_delete_backup'));
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
     }
@@ -55,29 +46,26 @@ class WPSiteMigrator {
     
     public function activate() {
         // Create backup directory
-        $upload_dir = wp_upload_dir();
-        $backup_dir = $upload_dir['basedir'] . '/wp-site-migrator';
-        if (!file_exists($backup_dir)) {
-            wp_mkdir_p($backup_dir);
+        if (!file_exists(WSM_BACKUP_DIR)) {
+            wp_mkdir_p(WSM_BACKUP_DIR);
         }
         
         // Create .htaccess to protect backup directory
-        $htaccess_content = "Order deny,allow\nDeny from all";
-        file_put_contents($backup_dir . '/.htaccess', $htaccess_content);
+        $htaccess_content = "Order deny,allow\nDeny from all\n<Files ~ \"\\.(zip)$\">\nAllow from all\n</Files>";
+        file_put_contents(WSM_BACKUP_DIR . '.htaccess', $htaccess_content);
         
-        // Create index.php to prevent directory listing
-        $index_content = "<?php\n// Silence is golden.";
-        file_put_contents($backup_dir . '/index.php', $index_content);
+        // Create index.php for security
+        file_put_contents(WSM_BACKUP_DIR . 'index.php', '<?php // Silence is golden');
     }
     
     public function deactivate() {
-        // Clean up temporary files
+        // Clean up old backups on deactivation
         $this->cleanup_old_backups();
     }
     
     public function add_admin_menu() {
         add_management_page(
-            __('WP Site Migrator', 'wp-site-migrator'),
+            __('Site Migrator', 'wp-site-migrator'),
             __('Site Migrator', 'wp-site-migrator'),
             'manage_options',
             'wp-site-migrator',
@@ -85,7 +73,7 @@ class WPSiteMigrator {
         );
     }
     
-    public function enqueue_scripts($hook) {
+    public function enqueue_admin_scripts($hook) {
         if ($hook !== 'tools_page_wp-site-migrator') {
             return;
         }
@@ -95,12 +83,7 @@ class WPSiteMigrator {
         
         wp_localize_script('wsm-admin', 'wsm_ajax', array(
             'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('wsm_nonce'),
-            'strings' => array(
-                'backup_started' => __('Backup process started...', 'wp-site-migrator'),
-                'backup_complete' => __('Backup completed successfully!', 'wp-site-migrator'),
-                'backup_error' => __('Backup failed. Please try again.', 'wp-site-migrator'),
-            )
+            'nonce' => wp_create_nonce('wsm_nonce')
         ));
     }
     
@@ -110,11 +93,16 @@ class WPSiteMigrator {
             <h1><?php _e('WP Site Migrator Pro', 'wp-site-migrator'); ?></h1>
             
             <div class="wsm-container">
+                <!-- Backup Creation Card -->
                 <div class="wsm-card">
-                    <h2><?php _e('Create Complete Site Backup', 'wp-site-migrator'); ?></h2>
-                    <p><?php _e('This will create a complete backup of your website including all files, database, and media.', 'wp-site-migrator'); ?></p>
+                    <h2><?php _e('Create New Backup', 'wp-site-migrator'); ?></h2>
+                    <p><?php _e('Create a complete backup of your WordPress site including database, files, and media.', 'wp-site-migrator'); ?></p>
                     
                     <div class="wsm-backup-options">
+                        <label>
+                            <input type="checkbox" id="include-database" checked>
+                            <?php _e('Include Database', 'wp-site-migrator'); ?>
+                        </label>
                         <label>
                             <input type="checkbox" id="include-uploads" checked>
                             <?php _e('Include Media Files (wp-content/uploads)', 'wp-site-migrator'); ?>
@@ -127,10 +115,6 @@ class WPSiteMigrator {
                             <input type="checkbox" id="include-plugins" checked>
                             <?php _e('Include Plugins', 'wp-site-migrator'); ?>
                         </label>
-                        <label>
-                            <input type="checkbox" id="include-database" checked>
-                            <?php _e('Include Database', 'wp-site-migrator'); ?>
-                        </label>
                     </div>
                     
                     <button id="start-backup" class="button button-primary button-large">
@@ -141,24 +125,24 @@ class WPSiteMigrator {
                         <div class="wsm-progress-bar">
                             <div class="wsm-progress-fill"></div>
                         </div>
-                        <div class="wsm-progress-text">Initializing...</div>
+                        <div class="wsm-progress-text"><?php _e('Initializing backup...', 'wp-site-migrator'); ?></div>
                     </div>
                 </div>
                 
+                <!-- Existing Backups Card -->
                 <div class="wsm-card">
-                    <h2><?php _e('Previous Backups', 'wp-site-migrator'); ?></h2>
-                    <div id="backup-list">
-                        <?php $this->display_backup_list(); ?>
-                    </div>
+                    <h2><?php _e('Existing Backups', 'wp-site-migrator'); ?></h2>
+                    <?php $this->display_backup_list(); ?>
                 </div>
                 
+                <!-- Instructions Card -->
                 <div class="wsm-card">
                     <h2><?php _e('Migration Instructions', 'wp-site-migrator'); ?></h2>
                     <ol>
-                        <li><?php _e('Create a complete backup using the button above', 'wp-site-migrator'); ?></li>
-                        <li><?php _e('Download the generated migration package', 'wp-site-migrator'); ?></li>
-                        <li><?php _e('Upload both files (migration.zip and installer.php) to your new server via FTP', 'wp-site-migrator'); ?></li>
-                        <li><?php _e('Navigate to yournewtomain.com/installer.php in your browser', 'wp-site-migrator'); ?></li>
+                        <li><?php _e('Create a backup using the form above', 'wp-site-migrator'); ?></li>
+                        <li><?php _e('Download both the backup file and installer file', 'wp-site-migrator'); ?></li>
+                        <li><?php _e('Upload both files to your new server via FTP', 'wp-site-migrator'); ?></li>
+                        <li><?php _e('Run the installer.php file in your browser', 'wp-site-migrator'); ?></li>
                         <li><?php _e('Follow the installation wizard to complete the migration', 'wp-site-migrator'); ?></li>
                     </ol>
                 </div>
@@ -167,353 +151,87 @@ class WPSiteMigrator {
         <?php
     }
     
-    public function display_backup_list() {
-        $upload_dir = wp_upload_dir();
-        $backup_dir = $upload_dir['basedir'] . '/wp-site-migrator';
-        
-        if (!is_dir($backup_dir)) {
-            echo '<p>' . __('No backups found.', 'wp-site-migrator') . '</p>';
-            return;
-        }
-        
-        $backups = glob($backup_dir . '/backup_*.zip');
+    private function display_backup_list() {
+        $backups = $this->get_backup_list();
         
         if (empty($backups)) {
-            echo '<p>' . __('No backups found.', 'wp-site-migrator') . '</p>';
+            echo '<p>' . __('No backups found. Create your first backup above.', 'wp-site-migrator') . '</p>';
             return;
         }
         
-        // Sort by modification time (newest first)
-        usort($backups, function($a, $b) {
-            return filemtime($b) - filemtime($a);
-        });
-        
         echo '<table class="wp-list-table widefat fixed striped">';
-        echo '<thead><tr><th>' . __('Backup Date', 'wp-site-migrator') . '</th><th>' . __('Size', 'wp-site-migrator') . '</th><th>' . __('Actions', 'wp-site-migrator') . '</th></tr></thead>';
+        echo '<thead>';
+        echo '<tr>';
+        echo '<th>' . __('Backup Name', 'wp-site-migrator') . '</th>';
+        echo '<th>' . __('Date Created', 'wp-site-migrator') . '</th>';
+        echo '<th>' . __('Size', 'wp-site-migrator') . '</th>';
+        echo '<th>' . __('Actions', 'wp-site-migrator') . '</th>';
+        echo '</tr>';
+        echo '</thead>';
         echo '<tbody>';
         
         foreach ($backups as $backup) {
-            $filename = basename($backup);
-            $date = date('Y-m-d H:i:s', filemtime($backup));
-            $size = $this->format_bytes(filesize($backup));
-            $download_url = wp_nonce_url(
-                admin_url('admin-ajax.php?action=wsm_download_backup&file=' . urlencode($filename)),
-                'wsm_download_nonce'
-            );
-            
             echo '<tr>';
-            echo '<td>' . esc_html($date) . '</td>';
-            echo '<td>' . esc_html($size) . '</td>';
-            echo '<td><a href="' . esc_url($download_url) . '" class="button">' . __('Download', 'wp-site-migrator') . '</a></td>';
+            echo '<td>' . esc_html($backup['name']) . '</td>';
+            echo '<td>' . esc_html($backup['date']) . '</td>';
+            echo '<td>' . esc_html($backup['size']) . '</td>';
+            echo '<td>';
+            
+            // Download Backup button
+            if (file_exists($backup['backup_path'])) {
+                echo '<a href="' . esc_url($backup['backup_url']) . '" class="button button-small" style="margin-right: 5px;">' . __('Download Backup', 'wp-site-migrator') . '</a>';
+            }
+            
+            // Download Installer button
+            if (file_exists($backup['installer_path'])) {
+                echo '<a href="' . esc_url($backup['installer_url']) . '" class="button button-small" style="margin-right: 5px;">' . __('Download Installer', 'wp-site-migrator') . '</a>';
+            }
+            
+            // Delete button
+            echo '<button class="button button-small wsm-delete-backup" data-backup="' . esc_attr($backup['basename']) . '" style="color: #a00;">' . __('Delete', 'wp-site-migrator') . '</button>';
+            
+            echo '</td>';
             echo '</tr>';
         }
         
-        echo '</tbody></table>';
+        echo '</tbody>';
+        echo '</table>';
     }
     
-    public function start_backup() {
-        check_ajax_referer('wsm_nonce', 'nonce');
+    private function get_backup_list() {
+        $backups = array();
         
-        if (!current_user_can('manage_options')) {
-            wp_die(__('Unauthorized', 'wp-site-migrator'));
+        if (!is_dir(WSM_BACKUP_DIR)) {
+            return $backups;
         }
         
-        // Increase limits
-        @set_time_limit(0);
-        @ini_set('memory_limit', '512M');
-        
-        $backup_id = 'backup_' . date('Y-m-d_H-i-s');
-        $upload_dir = wp_upload_dir();
-        $backup_dir = $upload_dir['basedir'] . '/wp-site-migrator/' . $backup_id;
-        
-        // Create backup directory
-        wp_mkdir_p($backup_dir);
-        
-        try {
-            // Step 1: Export database
-            $this->export_database($backup_dir);
-            
-            // Step 2: Copy WordPress files
-            $this->copy_wordpress_files($backup_dir);
-            
-            // Step 3: Create configuration file
-            $this->create_config_file($backup_dir);
-            
-            // Step 4: Create installer
-            $this->create_installer($backup_dir);
-            
-            // Step 5: Create final zip
-            $zip_file = $this->create_final_zip($backup_dir, $backup_id);
-            
-            // Clean up temporary directory
-            $this->delete_directory($backup_dir);
-            
-            wp_send_json_success(array(
-                'message' => __('Backup completed successfully!', 'wp-site-migrator'),
-                'download_url' => wp_nonce_url(
-                    admin_url('admin-ajax.php?action=wsm_download_backup&file=' . urlencode(basename($zip_file))),
-                    'wsm_download_nonce'
-                )
-            ));
-            
-        } catch (Exception $e) {
-            wp_send_json_error(__('Backup failed: ', 'wp-site-migrator') . $e->getMessage());
-        }
-    }
-    
-    private function export_database($backup_dir) {
-        global $wpdb;
-        
-        $sql_file = $backup_dir . '/database.sql';
-        $handle = fopen($sql_file, 'w');
-        
-        if (!$handle) {
-            throw new Exception(__('Could not create database export file', 'wp-site-migrator'));
-        }
-        
-        // Write SQL header
-        fwrite($handle, "-- WordPress Database Export\n");
-        fwrite($handle, "-- Generated on: " . date('Y-m-d H:i:s') . "\n\n");
-        fwrite($handle, "SET SQL_MODE = \"NO_AUTO_VALUE_ON_ZERO\";\n");
-        fwrite($handle, "SET time_zone = \"+00:00\";\n\n");
-        
-        // Get all tables
-        $tables = $wpdb->get_results("SHOW TABLES", ARRAY_N);
-        
-        foreach ($tables as $table) {
-            $table_name = $table[0];
-            
-            // Get table structure
-            $create_table = $wpdb->get_row("SHOW CREATE TABLE `$table_name`", ARRAY_N);
-            fwrite($handle, "\n-- Table structure for table `$table_name`\n");
-            fwrite($handle, "DROP TABLE IF EXISTS `$table_name`;\n");
-            fwrite($handle, $create_table[1] . ";\n\n");
-            
-            // Get table data in chunks to handle large tables
-            $offset = 0;
-            $chunk_size = 1000;
-            
-            do {
-                $rows = $wpdb->get_results("SELECT * FROM `$table_name` LIMIT $chunk_size OFFSET $offset", ARRAY_A);
-                
-                if (!empty($rows)) {
-                    if ($offset === 0) {
-                        fwrite($handle, "-- Dumping data for table `$table_name`\n");
-                    }
-                    
-                    foreach ($rows as $row) {
-                        $values = array();
-                        foreach ($row as $value) {
-                            if ($value === null) {
-                                $values[] = 'NULL';
-                            } else {
-                                $values[] = "'" . $wpdb->_real_escape($value) . "'";
-                            }
-                        }
-                        fwrite($handle, "INSERT INTO `$table_name` VALUES (" . implode(', ', $values) . ");\n");
-                    }
-                }
-                
-                $offset += $chunk_size;
-            } while (count($rows) === $chunk_size);
-            
-            fwrite($handle, "\n");
-        }
-        
-        fclose($handle);
-    }
-    
-    private function copy_wordpress_files($backup_dir) {
-        $wp_root = ABSPATH;
-        $files_dir = $backup_dir . '/files';
-        wp_mkdir_p($files_dir);
-        
-        // Exclude directories
-        $exclude = array(
-            $backup_dir,
-            $wp_root . 'wp-content/cache',
-            $wp_root . 'wp-content/uploads/wp-site-migrator',
-            $wp_root . 'wp-content/backup',
-            $wp_root . 'wp-content/backups'
-        );
-        
-        // Copy WordPress core files and wp-content
-        $this->copy_directory($wp_root, $files_dir, $exclude);
-    }
-    
-    private function copy_directory($src, $dst, $exclude = array()) {
-        if (!is_dir($src)) {
-            return;
-        }
-        
-        $dir = opendir($src);
-        if (!$dir) {
-            return;
-        }
-        
-        wp_mkdir_p($dst);
-        
-        while (($file = readdir($dir)) !== false) {
-            if ($file != '.' && $file != '..') {
-                $src_file = rtrim($src, '/') . '/' . $file;
-                $dst_file = rtrim($dst, '/') . '/' . $file;
-                
-                // Check if file/directory should be excluded
-                $excluded = false;
-                foreach ($exclude as $exclude_path) {
-                    if (strpos($src_file, rtrim($exclude_path, '/')) === 0) {
-                        $excluded = true;
-                        break;
-                    }
-                }
-                
-                if ($excluded) {
-                    continue;
-                }
-                
-                if (is_dir($src_file)) {
-                    $this->copy_directory($src_file, $dst_file, $exclude);
-                } else {
-                    @copy($src_file, $dst_file);
-                }
-            }
-        }
-        closedir($dir);
-    }
-    
-    private function create_config_file($backup_dir) {
-        $config = array(
-            'site_url' => get_site_url(),
-            'home_url' => get_home_url(),
-            'wp_version' => get_bloginfo('version'),
-            'php_version' => PHP_VERSION,
-            'mysql_version' => $this->get_mysql_version(),
-            'backup_date' => date('Y-m-d H:i:s'),
-            'backup_version' => WSM_VERSION,
-            'table_prefix' => $GLOBALS['wpdb']->prefix
-        );
-        
-        file_put_contents($backup_dir . '/config.json', json_encode($config, JSON_PRETTY_PRINT));
-    }
-    
-    private function get_mysql_version() {
-        global $wpdb;
-        return $wpdb->get_var("SELECT VERSION()");
-    }
-    
-    private function create_installer($backup_dir) {
-        $installer_content = $this->get_installer_template();
-        file_put_contents($backup_dir . '/installer.php', $installer_content);
-    }
-    
-    private function get_installer_template() {
-        ob_start();
-        include WSM_PLUGIN_PATH . 'templates/installer.php';
-        return ob_get_clean();
-    }
-    
-    private function create_final_zip($backup_dir, $backup_id) {
-        $upload_dir = wp_upload_dir();
-        $zip_file = $upload_dir['basedir'] . '/wp-site-migrator/' . $backup_id . '.zip';
-        
-        if (!class_exists('ZipArchive')) {
-            throw new Exception(__('ZipArchive class not found. Please install PHP ZIP extension.', 'wp-site-migrator'));
-        }
-        
-        $zip = new ZipArchive();
-        if ($zip->open($zip_file, ZipArchive::CREATE) !== TRUE) {
-            throw new Exception(__('Could not create zip file', 'wp-site-migrator'));
-        }
-        
-        $this->add_directory_to_zip($zip, $backup_dir, '');
-        $zip->close();
-        
-        return $zip_file;
-    }
-    
-    private function add_directory_to_zip($zip, $dir, $base_path) {
-        $files = scandir($dir);
+        $files = scandir(WSM_BACKUP_DIR);
         
         foreach ($files as $file) {
-            if ($file != '.' && $file != '..') {
-                $file_path = $dir . '/' . $file;
-                $zip_path = $base_path . $file;
+            if (substr($file, -4) === '.zip' && strpos($file, '_backup_') !== false) {
+                $backup_path = WSM_BACKUP_DIR . $file;
+                $installer_file = str_replace('_backup_', '_installer_', $file);
+                $installer_path = WSM_BACKUP_DIR . $installer_file;
                 
-                if (is_dir($file_path)) {
-                    $zip->addEmptyDir($zip_path);
-                    $this->add_directory_to_zip($zip, $file_path, $zip_path . '/');
-                } else {
-                    $zip->addFile($file_path, $zip_path);
-                }
-            }
-        }
-    }
-    
-    public function download_backup() {
-        check_admin_referer('wsm_download_nonce');
-        
-        if (!current_user_can('manage_options')) {
-            wp_die(__('Unauthorized', 'wp-site-migrator'));
-        }
-        
-        $filename = sanitize_file_name($_GET['file']);
-        $upload_dir = wp_upload_dir();
-        $file_path = $upload_dir['basedir'] . '/wp-site-migrator/' . $filename;
-        
-        if (!file_exists($file_path)) {
-            wp_die(__('File not found', 'wp-site-migrator'));
-        }
-        
-        header('Content-Type: application/zip');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Content-Length: ' . filesize($file_path));
-        header('Cache-Control: no-cache, must-revalidate');
-        header('Pragma: no-cache');
-        
-        readfile($file_path);
-        exit;
-    }
-    
-    private function delete_directory($dir) {
-        if (!is_dir($dir)) {
-            return;
-        }
-        
-        $files = array_diff(scandir($dir), array('.', '..'));
-        
-        foreach ($files as $file) {
-            $file_path = $dir . '/' . $file;
-            if (is_dir($file_path)) {
-                $this->delete_directory($file_path);
-            } else {
-                @unlink($file_path);
+                $backups[] = array(
+                    'name' => $file,
+                    'basename' => pathinfo($file, PATHINFO_FILENAME),
+                    'date' => date('Y-m-d H:i:s', filemtime($backup_path)),
+                    'size' => $this->format_bytes(filesize($backup_path)),
+                    'backup_path' => $backup_path,
+                    'backup_url' => WSM_BACKUP_URL . $file,
+                    'installer_path' => $installer_path,
+                    'installer_url' => WSM_BACKUP_URL . $installer_file
+                );
             }
         }
         
-        @rmdir($dir);
-    }
-    
-    private function cleanup_old_backups() {
-        $upload_dir = wp_upload_dir();
-        $backup_dir = $upload_dir['basedir'] . '/wp-site-migrator';
+        // Sort by date (newest first)
+        usort($backups, function($a, $b) {
+            return filemtime($b['backup_path']) - filemtime($a['backup_path']);
+        });
         
-        if (!is_dir($backup_dir)) {
-            return;
-        }
-        
-        $backups = glob($backup_dir . '/backup_*.zip');
-        
-        // Keep only the 5 most recent backups
-        if (count($backups) > 5) {
-            usort($backups, function($a, $b) {
-                return filemtime($a) - filemtime($b);
-            });
-            
-            $old_backups = array_slice($backups, 0, -5);
-            foreach ($old_backups as $backup) {
-                @unlink($backup);
-            }
-        }
+        return $backups;
     }
     
     private function format_bytes($size, $precision = 2) {
@@ -525,13 +243,255 @@ class WPSiteMigrator {
         
         return round($size, $precision) . ' ' . $units[$i];
     }
+    
+    public function ajax_start_backup() {
+        check_ajax_referer('wsm_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_die(__('Insufficient permissions', 'wp-site-migrator'));
+        }
+        
+        $include_uploads = isset($_POST['include_uploads']) && $_POST['include_uploads'] === 'true';
+        $include_themes = isset($_POST['include_themes']) && $_POST['include_themes'] === 'true';
+        $include_plugins = isset($_POST['include_plugins']) && $_POST['include_plugins'] === 'true';
+        $include_database = isset($_POST['include_database']) && $_POST['include_database'] === 'true';
+        
+        $result = $this->create_backup($include_uploads, $include_themes, $include_plugins, $include_database);
+        
+        if ($result['success']) {
+            wp_send_json_success($result);
+        } else {
+            wp_send_json_error($result['message']);
+        }
+    }
+    
+    public function ajax_delete_backup() {
+        check_ajax_referer('wsm_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_die(__('Insufficient permissions', 'wp-site-migrator'));
+        }
+        
+        $backup_name = sanitize_text_field($_POST['backup_name']);
+        
+        // Delete backup file
+        $backup_file = WSM_BACKUP_DIR . $backup_name . '.zip';
+        if (file_exists($backup_file)) {
+            unlink($backup_file);
+        }
+        
+        // Delete installer file
+        $installer_file = WSM_BACKUP_DIR . str_replace('_backup_', '_installer_', $backup_name) . '.zip';
+        if (file_exists($installer_file)) {
+            unlink($installer_file);
+        }
+        
+        wp_send_json_success(__('Backup deleted successfully', 'wp-site-migrator'));
+    }
+    
+    private function create_backup($include_uploads, $include_themes, $include_plugins, $include_database) {
+        try {
+            // Get site name for filename
+            $site_url = get_site_url();
+            $site_name = parse_url($site_url, PHP_URL_HOST);
+            $site_name = str_replace(array('.', '-'), '_', $site_name);
+            
+            $timestamp = date('Y-m-d_H-i-s');
+            $backup_filename = $site_name . '_backup_' . $timestamp . '.zip';
+            $installer_filename = $site_name . '_installer_' . $timestamp . '.zip';
+            
+            $backup_path = WSM_BACKUP_DIR . $backup_filename;
+            $installer_path = WSM_BACKUP_DIR . $installer_filename;
+            
+            // Create backup ZIP
+            $backup_zip = new ZipArchive();
+            if ($backup_zip->open($backup_path, ZipArchive::CREATE) !== TRUE) {
+                throw new Exception(__('Cannot create backup file', 'wp-site-migrator'));
+            }
+            
+            // Add database export
+            if ($include_database) {
+                $db_export = $this->export_database();
+                $backup_zip->addFromString('database.sql', $db_export);
+            }
+            
+            // Add WordPress files
+            $this->add_wordpress_files_to_zip($backup_zip, $include_uploads, $include_themes, $include_plugins);
+            
+            $backup_zip->close();
+            
+            // Create installer ZIP
+            $installer_zip = new ZipArchive();
+            if ($installer_zip->open($installer_path, ZipArchive::CREATE) !== TRUE) {
+                throw new Exception(__('Cannot create installer file', 'wp-site-migrator'));
+            }
+            
+            // Add installer script
+            $installer_content = $this->generate_installer_script();
+            $installer_zip->addFromString('installer.php', $installer_content);
+            
+            // Add the backup file to installer
+            $installer_zip->addFile($backup_path, $backup_filename);
+            
+            $installer_zip->close();
+            
+            // Clean up old backups
+            $this->cleanup_old_backups();
+            
+            return array(
+                'success' => true,
+                'backup_url' => WSM_BACKUP_URL . $backup_filename,
+                'installer_url' => WSM_BACKUP_URL . $installer_filename,
+                'backup_filename' => $backup_filename,
+                'installer_filename' => $installer_filename
+            );
+            
+        } catch (Exception $e) {
+            return array(
+                'success' => false,
+                'message' => $e->getMessage()
+            );
+        }
+    }
+    
+    private function export_database() {
+        global $wpdb;
+        
+        $tables = $wpdb->get_results('SHOW TABLES', ARRAY_N);
+        $sql_dump = '';
+        
+        $sql_dump .= "-- WordPress Database Export\n";
+        $sql_dump .= "-- Generated on: " . date('Y-m-d H:i:s') . "\n\n";
+        $sql_dump .= "SET SQL_MODE = \"NO_AUTO_VALUE_ON_ZERO\";\n";
+        $sql_dump .= "SET time_zone = \"+00:00\";\n\n";
+        
+        foreach ($tables as $table) {
+            $table_name = $table[0];
+            
+            // Get table structure
+            $create_table = $wpdb->get_row("SHOW CREATE TABLE `$table_name`", ARRAY_N);
+            $sql_dump .= "\n-- Table structure for table `$table_name`\n";
+            $sql_dump .= "DROP TABLE IF EXISTS `$table_name`;\n";
+            $sql_dump .= $create_table[1] . ";\n\n";
+            
+            // Get table data
+            $rows = $wpdb->get_results("SELECT * FROM `$table_name`", ARRAY_A);
+            
+            if (!empty($rows)) {
+                $sql_dump .= "-- Dumping data for table `$table_name`\n";
+                
+                foreach ($rows as $row) {
+                    $values = array();
+                    foreach ($row as $value) {
+                        if ($value === null) {
+                            $values[] = 'NULL';
+                        } else {
+                            $values[] = "'" . $wpdb->_real_escape($value) . "'";
+                        }
+                    }
+                    $sql_dump .= "INSERT INTO `$table_name` VALUES (" . implode(', ', $values) . ");\n";
+                }
+                $sql_dump .= "\n";
+            }
+        }
+        
+        return $sql_dump;
+    }
+    
+    private function add_wordpress_files_to_zip($zip, $include_uploads, $include_themes, $include_plugins) {
+        $root_path = ABSPATH;
+        
+        // Add WordPress core files
+        $this->add_directory_to_zip($zip, $root_path, '', array(
+            'wp-content/uploads' => !$include_uploads,
+            'wp-content/themes' => !$include_themes,
+            'wp-content/plugins' => !$include_plugins,
+            'wp-content/wsm-backups' => true,
+            'wp-config.php' => true // We'll generate a new one
+        ));
+        
+        // Add wp-content selectively
+        if ($include_uploads) {
+            $uploads_dir = WP_CONTENT_DIR . '/uploads/';
+            if (is_dir($uploads_dir)) {
+                $this->add_directory_to_zip($zip, $uploads_dir, 'wp-content/uploads/');
+            }
+        }
+        
+        if ($include_themes) {
+            $themes_dir = WP_CONTENT_DIR . '/themes/';
+            if (is_dir($themes_dir)) {
+                $this->add_directory_to_zip($zip, $themes_dir, 'wp-content/themes/');
+            }
+        }
+        
+        if ($include_plugins) {
+            $plugins_dir = WP_CONTENT_DIR . '/plugins/';
+            if (is_dir($plugins_dir)) {
+                $this->add_directory_to_zip($zip, $plugins_dir, 'wp-content/plugins/', array(
+                    'wp-site-migrator' => true // Exclude this plugin
+                ));
+            }
+        }
+    }
+    
+    private function add_directory_to_zip($zip, $source_path, $zip_path = '', $exclude = array()) {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($source_path, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST
+        );
+        
+        foreach ($iterator as $file) {
+            $file_path = $file->getRealPath();
+            $relative_path = substr($file_path, strlen($source_path));
+            $zip_file_path = $zip_path . $relative_path;
+            
+            // Check exclusions
+            $should_exclude = false;
+            foreach ($exclude as $exclude_path => $exclude_flag) {
+                if ($exclude_flag && strpos($relative_path, $exclude_path) === 0) {
+                    $should_exclude = true;
+                    break;
+                }
+            }
+            
+            if ($should_exclude) {
+                continue;
+            }
+            
+            if ($file->isDir()) {
+                $zip->addEmptyDir($zip_file_path);
+            } else {
+                $zip->addFile($file_path, $zip_file_path);
+            }
+        }
+    }
+    
+    private function generate_installer_script() {
+        $installer_template = file_get_contents(WSM_PLUGIN_DIR . 'templates/installer.php');
+        return $installer_template;
+    }
+    
+    private function cleanup_old_backups() {
+        if (!is_dir(WSM_BACKUP_DIR)) {
+            return;
+        }
+        
+        $files = glob(WSM_BACKUP_DIR . '*.zip');
+        
+        // Keep only the 5 most recent backups
+        if (count($files) > 10) { // 5 backups + 5 installers = 10 files
+            usort($files, function($a, $b) {
+                return filemtime($b) - filemtime($a);
+            });
+            
+            $files_to_delete = array_slice($files, 10);
+            foreach ($files_to_delete as $file) {
+                unlink($file);
+            }
+        }
+    }
 }
 
 // Initialize the plugin
-function wp_site_migrator_init() {
-    return WPSiteMigrator::get_instance();
-}
-
-// Start the plugin
-wp_site_migrator_init();
-?>
+new WP_Site_Migrator();
