@@ -1,104 +1,221 @@
 .wsm-container {
-    max-width: 1200px;
-    margin: 20px 0;
+  max-width: 1200px;
+  margin: 20px 0;
 }
 
 .wsm-card {
-    background: #fff;
-    border: 1px solid #ccd0d4;
-    border-radius: 4px;
-    padding: 20px;
-    margin-bottom: 20px;
-    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+  background: #fff;
+  border: 1px solid #ccd0d4;
+  border-radius: 4px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 1px rgba(0,0,0,.04);
 }
 
 .wsm-card h2 {
-    margin-top: 0;
-    color: #23282d;
-    font-size: 18px;
-    font-weight: 600;
+  margin-top: 0;
+  color: #23282d;
+  font-size: 18px;
+  font-weight: 600;
 }
 
 .wsm-backup-options {
-    margin: 20px 0;
+  margin: 20px 0;
 }
 
 .wsm-backup-options label {
-    display: block;
-    margin-bottom: 10px;
-    font-weight: 500;
+  display: block;
+  margin-bottom: 10px;
+  font-weight: 500;
 }
 
 .wsm-backup-options input[type="checkbox"] {
-    margin-right: 8px;
+  margin-right: 8px;
 }
 
 .wsm-progress {
-    margin-top: 20px;
-    padding: 20px;
-    background: #f9f9f9;
-    border-radius: 4px;
+  margin-top: 20px;
+  padding: 20px;
+  background: #f9f9f9;
+  border-radius: 4px;
 }
 
 .wsm-progress-bar {
-    width: 100%;
-    height: 20px;
-    background: #e0e0e0;
-    border-radius: 10px;
-    overflow: hidden;
-    margin-bottom: 10px;
+  width: 100%;
+  height: 20px;
+  background: #e0e0e0;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 10px;
 }
 
 .wsm-progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #0073aa, #005a87);
-    width: 0%;
-    transition: width 0.3s ease;
-    border-radius: 10px;
+  height: 100%;
+  background: linear-gradient(90deg, #0073aa, #005a87);
+  width: 0%;
+  transition: width 0.3s ease;
+  border-radius: 10px;
 }
 
 .wsm-progress-text {
-    text-align: center;
-    font-weight: 500;
-    color: #555;
+  text-align: center;
+  font-weight: 500;
+  color: #555;
 }
 
 .button-large {
-    padding: 8px 20px !important;
-    font-size: 14px !important;
-    height: auto !important;
+  padding: 8px 20px !important;
+  font-size: 14px !important;
+  height: auto !important;
 }
 
 .wp-list-table th,
 .wp-list-table td {
-    padding: 12px;
+  padding: 12px;
 }
 
 .wsm-card ol {
-    padding-left: 20px;
+  padding-left: 20px;
 }
 
 .wsm-card ol li {
-    margin-bottom: 8px;
-    line-height: 1.5;
+  margin-bottom: 8px;
+  line-height: 1.5;
 }
 
 .wsm-status-success {
-    color: #46b450;
-    font-weight: 600;
+  color: #46b450;
+  font-weight: 600;
 }
 
 .wsm-status-error {
-    color: #dc3232;
-    font-weight: 600;
+  color: #dc3232;
+  font-weight: 600;
 }
 
+/* Premium Action Buttons */
+.wsm-actions-cell {
+  white-space: nowrap;
+}
+
+.wsm-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  margin: 2px 4px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.wsm-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  text-decoration: none;
+}
+
+.wsm-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.wsm-btn .dashicons {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+}
+
+/* Primary Button - Download Backup */
+.wsm-btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: 1px solid #5a67d8;
+}
+
+.wsm-btn-primary:hover {
+  background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+  color: white;
+}
+
+/* Secondary Button - Download Installer */
+.wsm-btn-secondary {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  color: white;
+  border: 1px solid #3182ce;
+}
+
+.wsm-btn-secondary:hover {
+  background: linear-gradient(135deg, #3182ce 0%, #0ea5e9 100%);
+  color: white;
+}
+
+/* Danger Button - Delete */
+.wsm-btn-danger {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+  color: white;
+  border: 1px solid #e53e3e;
+}
+
+.wsm-btn-danger:hover {
+  background: linear-gradient(135deg, #e53e3e 0%, #c53030 100%);
+  color: white;
+}
+
+/* Button Loading State */
+.wsm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.wsm-btn:disabled:hover {
+  transform: none;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Responsive Design */
 @media (max-width: 768px) {
-    .wsm-container {
-        margin: 10px 0;
-    }
-    
-    .wsm-card {
-        padding: 15px;
-    }
+  .wsm-container {
+    margin: 10px 0;
+  }
+  
+  .wsm-card {
+    padding: 15px;
+  }
+  
+  .wsm-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    margin: 1px 2px;
+  }
+  
+  .wsm-btn .dashicons {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    margin-right: 4px;
+  }
+  
+  .wsm-actions-cell {
+    min-width: 200px;
+  }
+}
+
+/* Table Improvements */
+.wp-list-table .wsm-actions-cell {
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* Hover Effects for Table Rows */
+.wp-list-table tbody tr:hover {
+  background-color: #f8f9fa;
 }

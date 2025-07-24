@@ -36,6 +36,7 @@ class WP_Site_Migrator {
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
         add_action('wp_ajax_wsm_start_backup', array($this, 'ajax_start_backup'));
         add_action('wp_ajax_wsm_delete_backup', array($this, 'ajax_delete_backup'));
+        add_action('wp_ajax_wsm_download_installer', array($this, 'ajax_download_installer'));
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
     }
@@ -51,7 +52,7 @@ class WP_Site_Migrator {
         }
         
         // Create .htaccess to protect backup directory
-        $htaccess_content = "Order deny,allow\nDeny from all\n<Files ~ \"\\.(zip)$\">\nAllow from all\n</Files>";
+        $htaccess_content = "Order deny,allow\nDeny from all\n<Files ~ \"\\.(zip|php)$\">\nAllow from all\n</Files>";
         file_put_contents(WSM_BACKUP_DIR . '.htaccess', $htaccess_content);
         
         // Create index.php for security
@@ -175,20 +176,26 @@ class WP_Site_Migrator {
             echo '<td>' . esc_html($backup['name']) . '</td>';
             echo '<td>' . esc_html($backup['date']) . '</td>';
             echo '<td>' . esc_html($backup['size']) . '</td>';
-            echo '<td>';
+            echo '<td class="wsm-actions-cell">';
             
             // Download Backup button
             if (file_exists($backup['backup_path'])) {
-                echo '<a href="' . esc_url($backup['backup_url']) . '" class="button button-small" style="margin-right: 5px;">' . __('Download Backup', 'wp-site-migrator') . '</a>';
+                echo '<a href="' . esc_url($backup['backup_url']) . '" class="wsm-btn wsm-btn-primary wsm-btn-download">';
+                echo '<span class="dashicons dashicons-download"></span> ' . __('Download Backup', 'wp-site-migrator');
+                echo '</a>';
             }
             
             // Download Installer button
             if (file_exists($backup['installer_path'])) {
-                echo '<a href="' . esc_url($backup['installer_url']) . '" class="button button-small" style="margin-right: 5px;">' . __('Download Installer', 'wp-site-migrator') . '</a>';
+                echo '<button class="wsm-btn wsm-btn-secondary wsm-btn-installer" data-backup="' . esc_attr($backup['basename']) . '">';
+                echo '<span class="dashicons dashicons-admin-tools"></span> ' . __('Download Installer', 'wp-site-migrator');
+                echo '</button>';
             }
             
             // Delete button
-            echo '<button class="button button-small wsm-delete-backup" data-backup="' . esc_attr($backup['basename']) . '" style="color: #a00;">' . __('Delete', 'wp-site-migrator') . '</button>';
+            echo '<button class="wsm-btn wsm-btn-danger wsm-delete-backup" data-backup="' . esc_attr($backup['basename']) . '">';
+            echo '<span class="dashicons dashicons-trash"></span> ' . __('Delete', 'wp-site-migrator');
+            echo '</button>';
             
             echo '</td>';
             echo '</tr>';
@@ -210,7 +217,7 @@ class WP_Site_Migrator {
         foreach ($files as $file) {
             if (substr($file, -4) === '.zip' && strpos($file, '_backup_') !== false) {
                 $backup_path = WSM_BACKUP_DIR . $file;
-                $installer_file = str_replace('_backup_', '_installer_', $file);
+                $installer_file = str_replace('_backup_', '_installer_', str_replace('.zip', '.php', $file));
                 $installer_path = WSM_BACKUP_DIR . $installer_file;
                 
                 $backups[] = array(
@@ -281,12 +288,34 @@ class WP_Site_Migrator {
         }
         
         // Delete installer file
-        $installer_file = WSM_BACKUP_DIR . str_replace('_backup_', '_installer_', $backup_name) . '.zip';
+        $installer_file = WSM_BACKUP_DIR . str_replace('_backup_', '_installer_', $backup_name) . '.php';
         if (file_exists($installer_file)) {
             unlink($installer_file);
         }
         
         wp_send_json_success(__('Backup deleted successfully', 'wp-site-migrator'));
+    }
+    
+    public function ajax_download_installer() {
+        check_ajax_referer('wsm_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_die(__('Insufficient permissions', 'wp-site-migrator'));
+        }
+        
+        $backup_name = sanitize_text_field($_POST['backup_name']);
+        $installer_filename = str_replace('_backup_', '_installer_', $backup_name) . '.php';
+        $installer_path = WSM_BACKUP_DIR . $installer_filename;
+        
+        if (file_exists($installer_path)) {
+            header('Content-Type: application/octet-stream');
+            header('Content-Disposition: attachment; filename="' . $installer_filename . '"');
+            header('Content-Length: ' . filesize($installer_path));
+            readfile($installer_path);
+            exit;
+        }
+        
+        wp_die(__('Installer file not found', 'wp-site-migrator'));
     }
     
     private function create_backup($include_uploads, $include_themes, $include_plugins, $include_database) {
@@ -296,9 +325,9 @@ class WP_Site_Migrator {
             $site_name = parse_url($site_url, PHP_URL_HOST);
             $site_name = str_replace(array('.', '-'), '_', $site_name);
             
-            $timestamp = date('Y-m-d_H-i-s');
+            $timestamp = date('YmdHis'); // Removed hyphens
             $backup_filename = $site_name . '_backup_' . $timestamp . '.zip';
-            $installer_filename = $site_name . '_installer_' . $timestamp . '.zip';
+            $installer_filename = $site_name . '_installer_' . $timestamp . '.php';
             
             $backup_path = WSM_BACKUP_DIR . $backup_filename;
             $installer_path = WSM_BACKUP_DIR . $installer_filename;
@@ -320,20 +349,9 @@ class WP_Site_Migrator {
             
             $backup_zip->close();
             
-            // Create installer ZIP
-            $installer_zip = new ZipArchive();
-            if ($installer_zip->open($installer_path, ZipArchive::CREATE) !== TRUE) {
-                throw new Exception(__('Cannot create installer file', 'wp-site-migrator'));
-            }
-            
-            // Add installer script
-            $installer_content = $this->generate_installer_script();
-            $installer_zip->addFromString('installer.php', $installer_content);
-            
-            // Add the backup file to installer
-            $installer_zip->addFile($backup_path, $backup_filename);
-            
-            $installer_zip->close();
+            // Create installer PHP file
+            $installer_content = $this->generate_installer_script($backup_filename, $site_url);
+            file_put_contents($installer_path, $installer_content);
             
             // Clean up old backups
             $this->cleanup_old_backups();
@@ -361,7 +379,8 @@ class WP_Site_Migrator {
         $sql_dump = '';
         
         $sql_dump .= "-- WordPress Database Export\n";
-        $sql_dump .= "-- Generated on: " . date('Y-m-d H:i:s') . "\n\n";
+        $sql_dump .= "-- Generated on: " . date('Y-m-d H:i:s') . "\n";
+        $sql_dump .= "-- Original URL: " . get_site_url() . "\n\n";
         $sql_dump .= "SET SQL_MODE = \"NO_AUTO_VALUE_ON_ZERO\";\n";
         $sql_dump .= "SET time_zone = \"+00:00\";\n\n";
         
@@ -467,8 +486,13 @@ class WP_Site_Migrator {
         }
     }
     
-    private function generate_installer_script() {
+    private function generate_installer_script($backup_filename, $original_url) {
         $installer_template = file_get_contents(WSM_PLUGIN_DIR . 'templates/installer.php');
+        
+        // Replace placeholders
+        $installer_template = str_replace('{{BACKUP_FILENAME}}', $backup_filename, $installer_template);
+        $installer_template = str_replace('{{ORIGINAL_URL}}', $original_url, $installer_template);
+        
         return $installer_template;
     }
     
@@ -477,17 +501,22 @@ class WP_Site_Migrator {
             return;
         }
         
-        $files = glob(WSM_BACKUP_DIR . '*.zip');
+        $files = array_merge(
+            glob(WSM_BACKUP_DIR . '*.zip'),
+            glob(WSM_BACKUP_DIR . '*.php')
+        );
         
-        // Keep only the 5 most recent backups
-        if (count($files) > 10) { // 5 backups + 5 installers = 10 files
+        // Keep only the 5 most recent backups (10 files total - 5 zips + 5 installers)
+        if (count($files) > 10) {
             usort($files, function($a, $b) {
                 return filemtime($b) - filemtime($a);
             });
             
             $files_to_delete = array_slice($files, 10);
             foreach ($files_to_delete as $file) {
-                unlink($file);
+                if (basename($file) !== 'index.php' && basename($file) !== '.htaccess') {
+                    unlink($file);
+                }
             }
         }
     }

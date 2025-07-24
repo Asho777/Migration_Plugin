@@ -62,11 +62,11 @@ jQuery(document).ready(function($) {
             progressText.html(
               '<span class="wsm-status-success">✓ Backup completed!</span><br>' +
               '<a href="' + response.data.backup_url + '" class="button button-primary" style="margin-right: 10px; margin-top: 10px;">Download Backup</a>' +
-              '<a href="' + response.data.installer_url + '" class="button button-secondary" style="margin-top: 10px;">Download Installer</a>'
+              '<button class="button button-secondary wsm-download-installer-btn" data-backup="' + response.data.backup_filename.replace('.zip', '').replace('_backup_', '_backup_') + '" style="margin-top: 10px;">Download Installer</button>'
             );
           }, 1000);
           
-          // Refresh backup list after 3 seconds
+          // Refresh backup list after 5 seconds
           setTimeout(function() {
             location.reload();
           }, 5000);
@@ -87,6 +87,53 @@ jQuery(document).ready(function($) {
     });
   });
   
+  // Handle installer download
+  $(document).on('click', '.wsm-btn-installer, .wsm-download-installer-btn', function(e) {
+    e.preventDefault();
+    
+    const button = $(this);
+    const backupName = button.data('backup');
+    const originalText = button.html();
+    
+    button.prop('disabled', true);
+    button.html('<span class="dashicons dashicons-update"></span> Downloading...');
+    
+    // Create a form and submit it to trigger download
+    const form = $('<form>', {
+      method: 'POST',
+      action: wsm_ajax.ajax_url,
+      style: 'display: none;'
+    });
+    
+    form.append($('<input>', {
+      type: 'hidden',
+      name: 'action',
+      value: 'wsm_download_installer'
+    }));
+    
+    form.append($('<input>', {
+      type: 'hidden',
+      name: 'nonce',
+      value: wsm_ajax.nonce
+    }));
+    
+    form.append($('<input>', {
+      type: 'hidden',
+      name: 'backup_name',
+      value: backupName
+    }));
+    
+    $('body').append(form);
+    form.submit();
+    form.remove();
+    
+    // Reset button after a short delay
+    setTimeout(function() {
+      button.prop('disabled', false);
+      button.html(originalText);
+    }, 2000);
+  });
+  
   // Handle backup deletion
   $(document).on('click', '.wsm-delete-backup', function() {
     if (!confirm('Are you sure you want to delete this backup? This action cannot be undone.')) {
@@ -96,9 +143,10 @@ jQuery(document).ready(function($) {
     const button = $(this);
     const backupName = button.data('backup');
     const row = button.closest('tr');
+    const originalText = button.html();
     
     button.prop('disabled', true);
-    button.text('Deleting...');
+    button.html('<span class="dashicons dashicons-update"></span> Deleting...');
     
     $.ajax({
       url: wsm_ajax.ajax_url,
@@ -124,13 +172,13 @@ jQuery(document).ready(function($) {
         } else {
           alert('Failed to delete backup: ' + response.data);
           button.prop('disabled', false);
-          button.text('Delete');
+          button.html(originalText);
         }
       },
       error: function() {
         alert('Failed to delete backup. Please try again.');
         button.prop('disabled', false);
-        button.text('Delete');
+        button.html(originalText);
       }
     });
   });
