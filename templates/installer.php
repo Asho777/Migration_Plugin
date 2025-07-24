@@ -13,8 +13,8 @@ if (!defined('WSM_INSTALLER')) {
 
 // Configuration
 $config = array(
-    'max_execution_time' => 300,
-    'memory_limit' => '512M',
+    'max_execution_time' => 600, // Increased to 10 minutes
+    'memory_limit' => '1024M', // Increased memory limit
     'backup_file' => '{{BACKUP_FILENAME}}',
     'original_url' => '{{ORIGINAL_URL}}',
     'step' => isset($_GET['step']) ? (int)$_GET['step'] : 1
@@ -31,6 +31,18 @@ if (!file_exists($config['backup_file'])) {
     if (!empty($backup_files)) {
         $config['backup_file'] = $backup_files[0];
     }
+}
+
+// Handle AJAX progress requests
+if (isset($_GET['action']) && $_GET['action'] === 'get_progress') {
+    $progress_file = 'migration_progress.json';
+    if (file_exists($progress_file)) {
+        header('Content-Type: application/json');
+        echo file_get_contents($progress_file);
+    } else {
+        echo json_encode(array('progress' => 0, 'status' => 'Starting...'));
+    }
+    exit;
 }
 
 ?>
@@ -265,12 +277,13 @@ if (!file_exists($config['backup_file'])) {
         
         .progress {
             width: 100%;
-            height: 25px;
+            height: 30px;
             background: #e2e8f0;
-            border-radius: 12px;
+            border-radius: 15px;
             overflow: hidden;
             margin: 25px 0;
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+            position: relative;
         }
         
         .progress-bar {
@@ -278,7 +291,7 @@ if (!file_exists($config['backup_file'])) {
             background: linear-gradient(90deg, #48bb78, #38a169);
             width: 0%;
             transition: width 0.5s ease;
-            border-radius: 12px;
+            border-radius: 15px;
             position: relative;
             overflow: hidden;
         }
@@ -297,6 +310,17 @@ if (!file_exists($config['backup_file'])) {
                 transparent
             );
             animation: shimmer 2s infinite;
+        }
+        
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 14px;
+            text-shadow: 0 1px 2px rgba(255,255,255,0.8);
         }
         
         @keyframes shimmer {
@@ -400,6 +424,16 @@ if (!file_exists($config['backup_file'])) {
             color: #4a5568;
         }
         
+        .migration-status {
+            text-align: center;
+            margin: 30px 0;
+        }
+        
+        .migration-status h3 {
+            color: #2d3748;
+            margin-bottom: 20px;
+        }
+        
         @media (max-width: 768px) {
             .container {
                 margin: 10px;
@@ -477,11 +511,45 @@ if (!file_exists($config['backup_file'])) {
     </div>
     
     <script>
-        // Auto-refresh for progress steps
+        // Progress tracking for step 3
         if (window.location.search.includes('step=3')) {
-            setTimeout(function() {
-                window.location.href = '?step=4';
-            }, 3000);
+            let progressInterval;
+            let startTime = Date.now();
+            
+            function updateProgress() {
+                fetch('?action=get_progress&t=' + Date.now())
+                    .then(response => response.json())
+                    .then(data => {
+                        const progressBar = document.querySelector('.progress-bar');
+                        const progressText = document.querySelector('.progress-text');
+                        
+                        if (progressBar && progressText) {
+                            progressBar.style.width = data.progress + '%';
+                            progressText.textContent = data.progress + '% - ' + data.status;
+                        }
+                        
+                        // If progress reaches 100% or migration is complete, redirect
+                        if (data.progress >= 100 || data.status === 'complete') {
+                            clearInterval(progressInterval);
+                            setTimeout(() => {
+                                window.location.href = '?step=4';
+                            }, 2000);
+                        }
+                        
+                        // Timeout after 10 minutes
+                        if (Date.now() - startTime > 600000) {
+                            clearInterval(progressInterval);
+                            progressText.textContent = 'Migration taking longer than expected. Please check manually.';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Progress update failed:', error);
+                    });
+            }
+            
+            // Start progress updates
+            progressInterval = setInterval(updateProgress, 2000);
+            updateProgress(); // Initial call
         }
         
         // Form validation
@@ -580,6 +648,7 @@ function step2_database($config) {
             $config_content .= "define('DB_HOST', '" . addslashes($db_host) . "');\n";
             $config_content .= "define('SITE_URL', '" . addslashes($site_url) . "');\n";
             $config_content .= "define('ORIGINAL_URL', '" . addslashes($config['original_url']) . "');\n";
+            $config_content .= "define('BACKUP_FILE', '" . addslashes($config['backup_file']) . "');\n";
             
             file_put_contents('migration_config.php', $config_content);
             
@@ -644,30 +713,32 @@ function step3_extraction($config) {
     include 'migration_config.php';
     
     echo '<h2 style="color: #2d3748; margin-bottom: 20px;">Installing Your Website</h2>';
-    echo '<p style="margin-bottom: 30px; color: #4a5568;">Please wait while we restore your website. This may take a few minutes...</p>';
+    echo '<p style="margin-bottom: 30px; color: #4a5568;">Please wait while we restore your website. This process may take several minutes depending on your site size.</p>';
     
+    echo '<div class="migration-status">';
+    echo '<h3>Migration Progress</h3>';
     echo '<div class="progress">';
-    echo '<div class="progress-bar" style="width: 100%;"></div>';
+    echo '<div class="progress-bar" style="width: 0%;"></div>';
+    echo '<div class="progress-text">0% - Initializing...</div>';
+    echo '</div>';
     echo '</div>';
     
-    echo '<div style="text-align: center; margin: 20px 0;">';
-    echo '<div class="loading"></div>';
-    echo '<span>Processing migration...</span>';
-    echo '</div>';
-    
-    // Perform the actual migration
-    $result = perform_migration($config['backup_file']);
-    
-    if ($result['success']) {
-        echo '<div class="alert alert-success">✓ Migration completed successfully!</div>';
-        echo '<div class="text-center mt-3">';
-        echo '<a href="?step=4" class="btn">Complete Installation</a>';
-        echo '</div>';
-    } else {
-        echo '<div class="alert alert-error">✗ Migration failed: ' . $result['error'] . '</div>';
-        echo '<div class="text-center mt-3">';
-        echo '<a href="?step=2" class="btn btn-secondary">Back to Database Setup</a>';
-        echo '</div>';
+    // Start the migration process in the background
+    if (!file_exists('migration_started.flag')) {
+        // Create flag file to prevent multiple starts
+        file_put_contents('migration_started.flag', time());
+        
+        // Initialize progress
+        update_migration_progress(5, 'Starting migration process...');
+        
+        // Perform the actual migration
+        $result = perform_migration($config['backup_file']);
+        
+        if ($result['success']) {
+            update_migration_progress(100, 'complete');
+        } else {
+            update_migration_progress(0, 'error: ' . $result['error']);
+        }
     }
 }
 
@@ -708,6 +779,18 @@ function step4_completion($config) {
     
     // Clean up
     @unlink('migration_config.php');
+    @unlink('migration_progress.json');
+    @unlink('migration_started.flag');
+}
+
+// Update migration progress
+function update_migration_progress($progress, $status) {
+    $data = array(
+        'progress' => $progress,
+        'status' => $status,
+        'timestamp' => time()
+    );
+    file_put_contents('migration_progress.json', json_encode($data));
 }
 
 // Migration function
@@ -719,6 +802,8 @@ function perform_migration($backup_file) {
             throw new Exception('Backup file not found: ' . $backup_file);
         }
         
+        update_migration_progress(10, 'Extracting backup file...');
+        
         // Extract backup
         $zip = new ZipArchive;
         $result = $zip->open($backup_file);
@@ -726,21 +811,27 @@ function perform_migration($backup_file) {
         if ($result === TRUE) {
             $zip->extractTo('./');
             $zip->close();
+            update_migration_progress(30, 'Backup extracted successfully');
         } else {
             throw new Exception('Cannot extract backup file. Error code: ' . $result);
         }
         
+        update_migration_progress(40, 'Connecting to database...');
+        
         // Import database
         if (file_exists('database.sql')) {
             $connection = mysqli_connect(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME);
-            if (!connection) {
+            if (!$connection) {
                 throw new Exception('Database connection failed: ' . mysqli_connect_error());
             }
+            
+            update_migration_progress(50, 'Importing database...');
             
             $sql = file_get_contents('database.sql');
             
             // Replace URLs in database
             if (defined('ORIGINAL_URL') && ORIGINAL_URL) {
+                update_migration_progress(60, 'Updating URLs in database...');
                 $sql = str_replace(ORIGINAL_URL, SITE_URL, $sql);
                 // Also replace serialized URLs
                 $sql = str_replace(
@@ -750,28 +841,46 @@ function perform_migration($backup_file) {
                 );
             }
             
+            update_migration_progress(70, 'Executing database queries...');
+            
             // Execute SQL in chunks
             $queries = explode(";\n", $sql);
+            $total_queries = count($queries);
+            $executed = 0;
+            
             foreach ($queries as $query) {
                 $query = trim($query);
                 if (!empty($query)) {
                     if (!mysqli_query($connection, $query)) {
                         error_log('SQL Error: ' . mysqli_error($connection) . ' Query: ' . substr($query, 0, 100));
                     }
+                    $executed++;
+                    
+                    // Update progress during query execution
+                    if ($executed % 100 == 0) {
+                        $progress = 70 + (($executed / $total_queries) * 20);
+                        update_migration_progress($progress, 'Executing database queries... (' . $executed . '/' . $total_queries . ')');
+                    }
                 }
             }
             
             mysqli_close($connection);
             unlink('database.sql');
+            update_migration_progress(90, 'Database import completed');
         }
+        
+        update_migration_progress(95, 'Generating configuration files...');
         
         // Generate wp-config.php
         generate_wp_config();
+        
+        update_migration_progress(100, 'Migration completed successfully!');
         
         return array('success' => true);
         
     } catch (Exception $e) {
         error_log('Migration error: ' . $e->getMessage());
+        update_migration_progress(0, 'Error: ' . $e->getMessage());
         return array('success' => false, 'error' => $e->getMessage());
     }
 }

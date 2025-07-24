@@ -17,27 +17,33 @@ jQuery(document).ready(function($) {
     progressContainer.show();
     backupInProgress = true;
     
-    // Simulate progress updates
+    // Show spinner and initial text
+    progressText.html('<div class="wsm-spinner"></div> Initializing backup...');
+    
+    // Simulate progress updates with spinner
     let progress = 0;
     const progressInterval = setInterval(function() {
-      progress += Math.random() * 15;
+      progress += Math.random() * 10;
       if (progress > 90) {
         progress = 90;
       }
       progressBar.css('width', progress + '%');
       
+      let statusText = '';
       if (progress < 20) {
-        progressText.text('Exporting database...');
+        statusText = 'Exporting database...';
       } else if (progress < 40) {
-        progressText.text('Copying WordPress files...');
+        statusText = 'Copying WordPress files...';
       } else if (progress < 60) {
-        progressText.text('Copying media files...');
+        statusText = 'Copying media files...';
       } else if (progress < 80) {
-        progressText.text('Creating installer...');
+        statusText = 'Creating installer...';
       } else {
-        progressText.text('Finalizing backup...');
+        statusText = 'Finalizing backup...';
       }
-    }, 500);
+      
+      progressText.html('<div class="wsm-spinner"></div> ' + statusText);
+    }, 800);
     
     // Start backup process
     $.ajax({
@@ -55,21 +61,22 @@ jQuery(document).ready(function($) {
       success: function(response) {
         clearInterval(progressInterval);
         progressBar.css('width', '100%');
-        progressText.text('Backup completed successfully!');
         
         if (response.success) {
+          progressText.html('<span class="wsm-status-success">✓ Backup completed successfully!</span>');
+          
           setTimeout(function() {
             progressText.html(
               '<span class="wsm-status-success">✓ Backup completed!</span><br>' +
               '<a href="' + response.data.backup_url + '" class="button button-primary" style="margin-right: 10px; margin-top: 10px;">Download Backup</a>' +
               '<button class="button button-secondary wsm-download-installer-btn" data-backup="' + response.data.backup_filename.replace('.zip', '').replace('_backup_', '_backup_') + '" style="margin-top: 10px;">Download Installer</button>'
             );
-          }, 1000);
+          }, 1500);
           
           // Refresh backup list after 5 seconds
           setTimeout(function() {
             location.reload();
-          }, 5000);
+          }, 6000);
         } else {
           progressText.html('<span class="wsm-status-error">✗ ' + response.data + '</span>');
         }
@@ -96,36 +103,21 @@ jQuery(document).ready(function($) {
     const originalText = button.html();
     
     button.prop('disabled', true);
-    button.html('<span class="dashicons dashicons-update"></span> Downloading...');
+    button.html('<span class="dashicons dashicons-update"></span> <span class="wsm-btn-text">Loading...</span>');
     
-    // Create a form and submit it to trigger download
-    const form = $('<form>', {
-      method: 'POST',
-      action: wsm_ajax.ajax_url,
-      style: 'display: none;'
-    });
+    // Create a temporary form to download the installer
+    const downloadUrl = wsm_ajax.ajax_url + 
+      '?action=wsm_download_installer' +
+      '&nonce=' + encodeURIComponent(wsm_ajax.nonce) +
+      '&backup_name=' + encodeURIComponent(backupName);
     
-    form.append($('<input>', {
-      type: 'hidden',
-      name: 'action',
-      value: 'wsm_download_installer'
-    }));
-    
-    form.append($('<input>', {
-      type: 'hidden',
-      name: 'nonce',
-      value: wsm_ajax.nonce
-    }));
-    
-    form.append($('<input>', {
-      type: 'hidden',
-      name: 'backup_name',
-      value: backupName
-    }));
-    
-    $('body').append(form);
-    form.submit();
-    form.remove();
+    // Create temporary link and trigger download
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = 'installer.php';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
     
     // Reset button after a short delay
     setTimeout(function() {
@@ -146,7 +138,7 @@ jQuery(document).ready(function($) {
     const originalText = button.html();
     
     button.prop('disabled', true);
-    button.html('<span class="dashicons dashicons-update"></span> Deleting...');
+    button.html('<span class="dashicons dashicons-update"></span> <span class="wsm-btn-text">Deleting...</span>');
     
     $.ajax({
       url: wsm_ajax.ajax_url,

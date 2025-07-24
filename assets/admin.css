@@ -61,6 +61,26 @@
   text-align: center;
   font-weight: 500;
   color: #555;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* Rotary Progress Indicator */
+.wsm-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #e0e0e0;
+  border-top: 2px solid #0073aa;
+  border-radius: 50%;
+  animation: wsm-spin 1s linear infinite;
+  display: inline-block;
+}
+
+@keyframes wsm-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .button-large {
@@ -93,44 +113,51 @@
   font-weight: 600;
 }
 
-/* Premium Action Buttons */
+/* Premium Action Buttons - Fixed Layout */
 .wsm-actions-cell {
   white-space: nowrap;
+  min-width: 280px;
+  max-width: 280px;
+  overflow: hidden;
 }
 
 .wsm-btn {
   display: inline-flex;
   align-items: center;
-  padding: 8px 16px;
-  margin: 2px 4px;
+  padding: 6px 12px;
+  margin: 2px 3px;
   border: none;
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: 4px;
+  font-size: 12px;
   font-weight: 500;
   text-decoration: none;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   position: relative;
   overflow: hidden;
+  max-width: 85px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .wsm-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
   text-decoration: none;
 }
 
 .wsm-btn:active {
   transform: translateY(0);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 .wsm-btn .dashicons {
-  font-size: 16px;
-  width: 16px;
-  height: 16px;
-  margin-right: 6px;
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  flex-shrink: 0;
 }
 
 /* Primary Button - Download Backup */
@@ -178,7 +205,7 @@
 
 .wsm-btn:disabled:hover {
   transform: none;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 /* Responsive Design */
@@ -191,31 +218,67 @@
     padding: 15px;
   }
   
+  .wsm-actions-cell {
+    min-width: 200px;
+    max-width: 200px;
+  }
+  
   .wsm-btn {
-    padding: 6px 12px;
-    font-size: 12px;
+    padding: 4px 8px;
+    font-size: 11px;
     margin: 1px 2px;
+    max-width: 60px;
   }
   
   .wsm-btn .dashicons {
-    font-size: 14px;
-    width: 14px;
-    height: 14px;
-    margin-right: 4px;
-  }
-  
-  .wsm-actions-cell {
-    min-width: 200px;
+    font-size: 12px;
+    width: 12px;
+    height: 12px;
+    margin-right: 2px;
   }
 }
 
 /* Table Improvements */
 .wp-list-table .wsm-actions-cell {
-  text-align: center;
+  text-align: left;
   vertical-align: middle;
+  padding: 8px 12px;
 }
 
 /* Hover Effects for Table Rows */
 .wp-list-table tbody tr:hover {
   background-color: #f8f9fa;
+}
+
+/* Button Text Truncation */
+.wsm-btn-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ensure table doesn't overflow */
+.wp-list-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.wp-list-table th:nth-child(1),
+.wp-list-table td:nth-child(1) {
+  width: 35%;
+}
+
+.wp-list-table th:nth-child(2),
+.wp-list-table td:nth-child(2) {
+  width: 20%;
+}
+
+.wp-list-table th:nth-child(3),
+.wp-list-table td:nth-child(3) {
+  width: 15%;
+}
+
+.wp-list-table th:nth-child(4),
+.wp-list-table td:nth-child(4) {
+  width: 30%;
 }

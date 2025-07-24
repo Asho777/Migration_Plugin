@@ -37,6 +37,7 @@ class WP_Site_Migrator {
         add_action('wp_ajax_wsm_start_backup', array($this, 'ajax_start_backup'));
         add_action('wp_ajax_wsm_delete_backup', array($this, 'ajax_delete_backup'));
         add_action('wp_ajax_wsm_download_installer', array($this, 'ajax_download_installer'));
+        add_action('wp_ajax_nopriv_wsm_download_installer', array($this, 'ajax_download_installer'));
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
     }
@@ -160,6 +161,7 @@ class WP_Site_Migrator {
             return;
         }
         
+        echo '<div style="overflow-x: auto;">';
         echo '<table class="wp-list-table widefat fixed striped">';
         echo '<thead>';
         echo '<tr>';
@@ -180,21 +182,21 @@ class WP_Site_Migrator {
             
             // Download Backup button
             if (file_exists($backup['backup_path'])) {
-                echo '<a href="' . esc_url($backup['backup_url']) . '" class="wsm-btn wsm-btn-primary wsm-btn-download">';
-                echo '<span class="dashicons dashicons-download"></span> ' . __('Download Backup', 'wp-site-migrator');
+                echo '<a href="' . esc_url($backup['backup_url']) . '" class="wsm-btn wsm-btn-primary" title="Download Backup ZIP">';
+                echo '<span class="dashicons dashicons-download"></span> <span class="wsm-btn-text">Backup</span>';
                 echo '</a>';
             }
             
             // Download Installer button
             if (file_exists($backup['installer_path'])) {
-                echo '<button class="wsm-btn wsm-btn-secondary wsm-btn-installer" data-backup="' . esc_attr($backup['basename']) . '">';
-                echo '<span class="dashicons dashicons-admin-tools"></span> ' . __('Download Installer', 'wp-site-migrator');
+                echo '<button class="wsm-btn wsm-btn-secondary wsm-btn-installer" data-backup="' . esc_attr($backup['basename']) . '" title="Download Installer PHP">';
+                echo '<span class="dashicons dashicons-admin-tools"></span> <span class="wsm-btn-text">Installer</span>';
                 echo '</button>';
             }
             
             // Delete button
-            echo '<button class="wsm-btn wsm-btn-danger wsm-delete-backup" data-backup="' . esc_attr($backup['basename']) . '">';
-            echo '<span class="dashicons dashicons-trash"></span> ' . __('Delete', 'wp-site-migrator');
+            echo '<button class="wsm-btn wsm-btn-danger wsm-delete-backup" data-backup="' . esc_attr($backup['basename']) . '" title="Delete Backup">';
+            echo '<span class="dashicons dashicons-trash"></span> <span class="wsm-btn-text">Delete</span>';
             echo '</button>';
             
             echo '</td>';
@@ -203,6 +205,7 @@ class WP_Site_Migrator {
         
         echo '</tbody>';
         echo '</table>';
+        echo '</div>';
     }
     
     private function get_backup_list() {
@@ -297,20 +300,27 @@ class WP_Site_Migrator {
     }
     
     public function ajax_download_installer() {
-        check_ajax_referer('wsm_nonce', 'nonce');
-        
-        if (!current_user_can('manage_options')) {
-            wp_die(__('Insufficient permissions', 'wp-site-migrator'));
+        // Allow both logged in and non-logged in access for download
+        if (is_admin()) {
+            check_ajax_referer('wsm_nonce', 'nonce');
+            if (!current_user_can('manage_options')) {
+                wp_die(__('Insufficient permissions', 'wp-site-migrator'));
+            }
         }
         
-        $backup_name = sanitize_text_field($_POST['backup_name']);
+        $backup_name = sanitize_text_field($_GET['backup_name']);
         $installer_filename = str_replace('_backup_', '_installer_', $backup_name) . '.php';
         $installer_path = WSM_BACKUP_DIR . $installer_filename;
         
         if (file_exists($installer_path)) {
+            // Set headers for download
             header('Content-Type: application/octet-stream');
-            header('Content-Disposition: attachment; filename="' . $installer_filename . '"');
+            header('Content-Disposition: attachment; filename="installer.php"');
             header('Content-Length: ' . filesize($installer_path));
+            header('Cache-Control: no-cache, must-revalidate');
+            header('Expires: 0');
+            
+            // Output file content
             readfile($installer_path);
             exit;
         }
